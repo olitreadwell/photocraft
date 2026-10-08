@@ -524,6 +524,7 @@ pub fn specs() -> Vec<CommandSpec> {
                     _ => return Err(bad("type.create", "orientation must be horizontal or vertical")),
                 };
                 check_size_tracking(p).map_err(|m| bad("type.create", m))?;
+                check_kerning(p).map_err(|m| bad("type.create", m))?;
                 let text = norm_text(p.get("text").and_then(Value::as_str).unwrap_or(""));
                 // Type › Save Default Type Styles sets the starting styles; the colour is always
                 // the foreground colour, as in Photoshop.
@@ -1113,6 +1114,18 @@ mod tests {
             assert!(s.execute("type.edit", p.clone()).is_err(), "{p}");
         }
         assert!(s.execute("type.setStyle", json!({"layer": id, "kerning": "tight"})).is_err());
+        // `type.create` publishes and applies the same character keys through the same helper,
+        // so it must reject the invalid kerning values instead of substituting a different one.
+        for kerning in [json!("tight"), json!(1e9), json!(-5000), json!(true), json!([1])] {
+            assert!(
+                matches!(
+                    s.execute("type.create", json!({"x": 5, "y": 50, "text": "AV", "size": 30, "kerning": kerning})),
+                    Err(EngineError::BadParams { cmd, .. }) if cmd == "type.create"
+                ),
+                "{kerning}"
+            );
+        }
+        assert!(s.execute("type.create", json!({"x": 5, "y": 50, "text": "AV", "size": 30, "kerning": "optical"})).is_ok());
         assert_eq!(text_layer(&s, id).runs, before.runs);
     }
 
